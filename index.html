@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Puzzle Generator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .step-card {
+            background-color: #1e293b;
+            border: 1px solid #334155;
+            transition: all 0.3s ease;
+        }
+        .step-card.active {
+            border-color: #38bdf8;
+            box-shadow: 0 0 15px rgba(56, 189, 248, 0.3);
+        }
+        .puzzle-type-btn.selected {
+             background-color: #0ea5e9;
+             color: white;
+        }
+        .connector {
+            width: 50px;
+            height: 2px;
+            background-color: #334155;
+        }
+        .crossword-grid {
+            display: grid;
+            grid-template-columns: repeat(15, 2rem);
+            gap: 1px;
+        }
+        .crossword-cell {
+            width: 2rem;
+            height: 2rem;
+            text-align: center;
+            font-size: 1.1rem;
+            text-transform: uppercase;
+            background-color: #334155;
+            color: white;
+            border: 1px solid #475569;
+        }
+        .crossword-cell.empty {
+            background-color: transparent;
+            border: none;
+        }
+        .word-search-grid {
+            display: grid;
+            grid-template-columns: repeat(15, 2rem);
+            gap: 2px;
+        }
+        .word-search-cell {
+            width: 2rem;
+            height: 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+            text-transform: uppercase;
+            background-color: #334155;
+            color: white;
+            cursor: pointer;
+            user-select: none;
+        }
+        .word-search-cell.selected {
+            background-color: #38bdf8;
+        }
+         .word-search-cell.found {
+            background-color: #10b981;
+        }
+        .mcq-option.correct {
+            background-color: #10b981;
+        }
+        .mcq-option.incorrect {
+            background-color: #f43f5e;
+        }
+        /* Style for printing to PDF */
+        #printable-area {
+            background-color: #1f2937; /* Same as bg-slate-800 */
+            color: white;
+            padding: 1rem;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white antialiased">
+    <div class="container mx-auto p-4 md:p-8">
+        <header class="text-center mb-10">
+            <h1 class="text-4xl font-bold text-sky-400">PDF Puzzle Generator</h1>
+            <p class="text-lg text-gray-400 mt-2">Turn any document into an interactive puzzle.</p>
+        </header>
+
+        <!-- Workflow Steps -->
+        <div class="flex items-center justify-center flex-wrap gap-4 mb-12">
+            <div id="step1" class="step-card active p-6 rounded-lg w-64">
+                <h2 class="font-bold text-lg">1. Upload PDF</h2>
+                <p class="text-sm text-gray-400">Choose a PDF document.</p>
+            </div>
+            <div class="connector"></div>
+            <div id="step2" class="step-card p-6 rounded-lg w-64">
+                <h2 class="font-bold text-lg">2. Select Puzzle</h2>
+                <p class="text-sm text-gray-400">Pick a puzzle type.</p>
+            </div>
+            <div class="connector"></div>
+            <div id="step3" class="step-card p-6 rounded-lg w-64">
+                <h2 class="font-bold text-lg">3. Generate & Play</h2>
+                <p class="text-sm text-gray-400">Interact with your puzzle.</p>
+            </div>
+        </div>
+
+        <!-- Main Content Area -->
+        <main class="bg-slate-800 p-8 rounded-xl shadow-2xl min-h-[400px]">
+            <!-- PDF Upload Section -->
+            <div id="pdf-upload-section">
+                <h3 class="text-2xl font-semibold mb-4">Upload your PDF</h3>
+                <div class="flex items-center justify-center w-full">
+                    <label for="pdf-upload" class="flex flex-col items-center justify-center w-full h-64 border-2 border-slate-600 border-dashed rounded-lg cursor-pointer bg-slate-700/50 hover:bg-slate-700">
+                        <div class="flex flex-col items-center justify-center pt-5 pb-6">
+                            <svg class="w-8 h-8 mb-4 text-slate-400" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 20 16"><path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 13h3a3 3 0 0 0 0-6h-.025A5.56 5.56 0 0 0 16 6.5 5.5 5.5 0 0 0 5.207 5.021C5.137 5.017 5.071 5 5 5a4 4 0 0 0 0 8h2.167M10 15V6m0 0L8 8m2-2 2 2"/></svg>
+                            <p class="mb-2 text-sm text-slate-400"><span class="font-semibold">Click to upload</span> or drag and drop</p>
+                            <p id="file-name" class="text-xs text-slate-500">PDF, up to 10MB</p>
+                        </div>
+                        <input id="pdf-upload" type="file" class="hidden" accept=".pdf" />
+                    </label>
+                </div>  
+                <div class="text-center mt-6">
+                     <button id="extract-text-btn" class="bg-sky-500 hover:bg-sky-600 text-white font-bold py-3 px-8 rounded-full transition duration-300 disabled:bg-slate-600 disabled:cursor-not-allowed" disabled>Extract Text</button>
+                </div>
+            </div>
+
+            <!-- Puzzle Selection -->
+            <div id="puzzle-selection-section" class="hidden">
+                 <h3 class="text-2xl font-semibold mb-4">Choose a Puzzle Type</h3>
+                 <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                     <button class="puzzle-type-btn p-6 bg-slate-700/50 rounded-lg text-left hover:bg-slate-700 transition" data-type="wordsearch">
+                         <h4 class="text-xl font-bold">Word Search</h4>
+                         <p class="text-slate-400">Find hidden words from the document.</p>
+                     </button>
+                     <button class="puzzle-type-btn p-6 bg-slate-700/50 rounded-lg text-left hover:bg-slate-700 transition" data-type="crossword">
+                         <h4 class="text-xl font-bold">Crossword</h4>
+                         <p class="text-slate-400">Use AI to generate clues and answers.</p>
+                     </button>
+                      <button class="puzzle-type-btn p-6 bg-slate-700/50 rounded-lg text-left hover:bg-slate-700 transition" data-type="mcq">
+                         <h4 class="text-xl font-bold">MCQ Quiz</h4>
+                         <p class="text-slate-400">Test your knowledge with AI questions.</p>
+                     </button>
+                 </div>
+                 
+                 <div id="puzzle-options" class="hidden mt-6 p-4 bg-slate-900/50 rounded-lg text-center">
+                    <div id="wordsearch-options" class="hidden">
+                        <label for="wordsearch-count" class="block text-sm font-medium text-gray-300 mb-2">Number of Words to Find (5-15)</label>
+                        <input type="number" id="wordsearch-count" value="10" min="5" max="15" class="w-full md:w-1/3 mx-auto p-2 bg-slate-700 border border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500">
+                    </div>
+                    <div id="crossword-options" class="hidden">
+                        <label for="crossword-clues" class="block text-sm font-medium text-gray-300 mb-2">Number of Clues to Generate (4-8)</label>
+                        <input type="number" id="crossword-clues" value="5" min="4" max="8" class="w-full md:w-1/3 mx-auto p-2 bg-slate-700 border border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500">
+                    </div>
+                    <div id="mcq-options" class="hidden">
+                        <label for="mcq-count" class="block text-sm font-medium text-gray-300 mb-2">Number of MCQs to Generate (1-10)</label>
+                        <input type="number" id="mcq-count" value="4" min="1" max="10" class="w-full md:w-1/3 mx-auto p-2 bg-slate-700 border border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500">
+                    </div>
+                    <div class="text-center mt-6">
+                        <button id="generate-btn" class="bg-sky-500 hover:bg-sky-600 text-white font-bold py-3 px-8 rounded-full transition duration-300">Generate Puzzle</button>
+                    </div>
+                 </div>
+            </div>
+
+            <!-- Puzzle Display -->
+            <div id="puzzle-display-section" class="hidden">
+                 <div id="printable-area">
+                    <h3 id="puzzle-title" class="text-2xl font-semibold mb-4 text-center"></h3>
+                    <div id="puzzle-container" class="flex flex-col md:flex-row gap-8 items-start justify-center">
+                        <div id="grid-container" class="mx-auto w-full"></div>
+                        <div id="words-container" class="w-full md:w-1/3"></div>
+                    </div>
+                 </div>
+                 <div class="text-center mt-8 flex justify-center gap-4">
+                     <button id="download-pdf-btn" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-6 rounded-full transition duration-300">Download as PDF</button>
+                     <button id="reset-btn" class="bg-slate-600 hover:bg-slate-500 text-white font-bold py-2 px-6 rounded-full transition duration-300">Start Over</button>
+                 </div>
+            </div>
+             <div id="loading" class="hidden text-center">
+                <div role="status">
+                    <svg aria-hidden="true" class="inline w-8 h-8 text-gray-200 animate-spin dark:text-gray-600 fill-sky-500" viewBox="0 0 100 101" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M100 50.5908C100 78.2051 77.6142 100.591 50 100.591C22.3858 100.591 0 78.2051 0 50.5908C0 22.9766 22.3858 0.59082 50 0.59082C77.6142 0.59082 100 22.9766 100 50.5908ZM9.08144 50.5908C9.08144 73.1895 27.4013 91.5094 50 91.5094C72.5987 91.5094 90.9186 73.1895 90.9186 50.5908C90.9186 27.9921 72.5987 9.67226 50 9.67226C27.4013 9.67226 9.08144 27.9921 9.08144 50.5908Z" fill="currentColor"/>
+                        <path d="M93.9676 39.0409C96.393 38.4038 97.8624 35.9116 97.0079 33.5539C95.2932 28.8227 92.871 24.3692 89.8167 20.348C85.8452 15.1192 80.8826 10.7238 75.2124 7.41289C69.5422 4.10194 63.2754 1.94025 56.7698 1.05124C51.7666 0.367541 46.6976 0.446843 41.7345 1.27873C39.2613 1.69328 37.813 4.19778 38.4501 6.62326C39.0873 9.04874 41.5694 10.4717 44.0505 10.1071C47.8511 9.54855 51.7191 9.52689 55.5402 10.0491C60.8642 10.7766 65.9928 12.5457 70.6331 15.2552C75.2735 17.9648 79.3347 21.5619 82.5849 25.841C84.9175 28.9121 86.7997 32.2913 88.1811 35.8758C89.083 38.2158 91.5421 39.6781 93.9676 39.0409Z" fill="currentFill"/>
+                    </svg>
+                    <p class="mt-2 text-lg text-slate-300">Generating Puzzle...</p>
+                </div>
+             </div>
+        </main>
+    </div>
+
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.worker.min.js`;
+
+        const { jsPDF } = window.jspdf;
+        
+        // --- Hardcoded API Key ---
+        const apiKey = "AIzaSyDPP1keQw1kc98ddMixSKVWuSdINR98cFA";
+
+        const pdfUploadSection = document.getElementById('pdf-upload-section');
+        const puzzleSelectionSection = document.getElementById('puzzle-selection-section');
+        const puzzleDisplaySection = document.getElementById('puzzle-display-section');
+        const loadingIndicator = document.getElementById('loading');
+        
+        const puzzleOptionsContainer = document.getElementById('puzzle-options');
+        const wordsearchOptions = document.getElementById('wordsearch-options');
+        const crosswordOptions = document.getElementById('crossword-options');
+        const mcqOptions = document.getElementById('mcq-options');
+
+        const pdfUpload = document.getElementById('pdf-upload');
+        const fileNameEl = document.getElementById('file-name');
+        const extractTextBtn = document.getElementById('extract-text-btn');
+        const puzzleTypeBtns = document.querySelectorAll('.puzzle-type-btn');
+        const generateBtn = document.getElementById('generate-btn');
+        const resetBtn = document.getElementById('reset-btn');
+        const downloadPdfBtn = document.getElementById('download-pdf-btn');
+        
+        const mcqCountInput = document.getElementById('mcq-count');
+        const wordsearchCountInput = document.getElementById('wordsearch-count');
+        const crosswordCluesInput = document.getElementById('crossword-clues');
+
+        let extractedText = '', words = [], mcqData = [], selectedPuzzleType = '';
+
+        // Step 1: PDF Handling
+        pdfUpload.addEventListener('change', () => {
+            if (pdfUpload.files.length > 0) {
+                fileNameEl.textContent = pdfUpload.files[0].name;
+                extractTextBtn.disabled = false;
+            }
+        });
+
+        extractTextBtn.addEventListener('click', async () => {
+            if (pdfUpload.files.length === 0) return;
+            showLoading(true, pdfUploadSection);
+            const file = pdfUpload.files[0];
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                try {
+                    const typedarray = new Uint8Array(e.target.result);
+                    const pdf = await pdfjsLib.getDocument(typedarray).promise;
+                    let text = '';
+                    for (let i = 1; i <= pdf.numPages; i++) {
+                        const page = await pdf.getPage(i);
+                        const content = await page.getTextContent();
+                        content.items.forEach(item => text += item.str + ' ');
+                    }
+                    extractedText = text;
+                    words = [...new Set(text.toLowerCase().match(/\b[a-z]{4,10}\b/g) || [])];
+                    showLoading(false, pdfUploadSection);
+                    updateStep(2);
+                    pdfUploadSection.classList.add('hidden');
+                    puzzleSelectionSection.classList.remove('hidden');
+                } catch (error) {
+                    console.error("Error processing PDF:", error);
+                    alert("Could not process the PDF.");
+                    showLoading(false, pdfUploadSection);
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        });
+
+        // Step 2: Puzzle Selection
+        puzzleTypeBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                selectedPuzzleType = btn.dataset.type;
+                puzzleTypeBtns.forEach(b => b.classList.remove('selected'));
+                btn.classList.add('selected');
+                puzzleOptionsContainer.classList.remove('hidden');
+                [wordsearchOptions, crosswordOptions, mcqOptions].forEach(el => el.classList.add('hidden'));
+                if (selectedPuzzleType === 'wordsearch') wordsearchOptions.classList.remove('hidden');
+                else if (selectedPuzzleType === 'crossword') crosswordOptions.classList.remove('hidden');
+                else if (selectedPuzzleType === 'mcq') mcqOptions.classList.remove('hidden');
+            });
+        });
+
+        generateBtn.addEventListener('click', async () => {
+            if (!selectedPuzzleType) return alert('Please select a puzzle type first.');
+            showLoading(true, puzzleSelectionSection);
+            if (selectedPuzzleType === 'wordsearch') await generateWordSearch(parseInt(wordsearchCountInput.value, 10));
+            else if (selectedPuzzleType === 'crossword') await generateCrossword(apiKey, parseInt(crosswordCluesInput.value, 10));
+            else if (selectedPuzzleType === 'mcq') await generateMCQQuiz(apiKey, parseInt(mcqCountInput.value, 10));
+            showLoading(false, puzzleSelectionSection);
+            updateStep(3);
+            puzzleSelectionSection.classList.add('hidden');
+            puzzleDisplaySection.classList.remove('hidden');
+        });
+
+        // Step 3: Puzzle Generation Functions (logic mostly unchanged)
+        function generateWordSearch(wordCount) {
+            document.getElementById('puzzle-title').textContent = 'Word Search';
+            document.getElementById('words-container').classList.remove('hidden');
+            const gridContainer = document.getElementById('grid-container');
+            const wordsContainer = document.getElementById('words-container');
+            gridContainer.innerHTML = ''; wordsContainer.innerHTML = '';
+            const gridSize = 15;
+            let grid = Array(gridSize).fill(0).map(() => Array(gridSize).fill(''));
+            const selectedWords = words.sort(() => 0.5 - Math.random()).slice(0, wordCount);
+            selectedWords.forEach(word => {
+                let placed = false;
+                for (let i = 0; i < 100; i++) {
+                    const dir = Math.random() > 0.5 ? 'h' : 'v';
+                    const r = Math.floor(Math.random() * gridSize), c = Math.floor(Math.random() * gridSize);
+                    if (dir === 'h' && c + word.length <= gridSize) {
+                        let canPlace = true;
+                        for (let j = 0; j < word.length; j++) if (grid[r][c + j] !== '' && grid[r][c + j] !== word[j]) canPlace = false;
+                        if (canPlace) { for (let j = 0; j < word.length; j++) grid[r][c + j] = word[j]; placed = true; break; }
+                    } else if (dir === 'v' && r + word.length <= gridSize) {
+                        let canPlace = true;
+                        for (let j = 0; j < word.length; j++) if (grid[r + j][c] !== '' && grid[r + j][c] !== word[j]) canPlace = false;
+                        if (canPlace) { for (let j = 0; j < word.length; j++) grid[r + j][c] = word[j]; placed = true; break; }
+                    }
+                }
+            });
+            const alphabet = "abcdefghijklmnopqrstuvwxyz";
+            for (let r=0; r<gridSize; r++) for (let c=0; c<gridSize; c++) if (grid[r][c] === '') grid[r][c] = alphabet[Math.floor(Math.random() * alphabet.length)];
+            const gridEl = document.createElement('div'); gridEl.className = 'word-search-grid';
+            grid.forEach((row, r) => row.forEach((cell, c) => {
+                const cellEl = document.createElement('div'); cellEl.className = 'word-search-cell'; cellEl.textContent = cell; cellEl.dataset.row = r; cellEl.dataset.col = c; gridEl.appendChild(cellEl);
+            }));
+            gridContainer.appendChild(gridEl);
+            wordsContainer.innerHTML = '<h4 class="text-xl font-bold mb-4">Find these words:</h4>';
+            const wordListEl = document.createElement('ul'); wordListEl.className = 'list-disc list-inside text-slate-300';
+            selectedWords.forEach(word => { const li = document.createElement('li'); li.textContent = word; li.id = `word-${word}`; wordListEl.appendChild(li); });
+            wordsContainer.appendChild(wordListEl);
+            let selection = [], isSelecting = false;
+            gridEl.addEventListener('mousedown', e => { if (e.target.classList.contains('word-search-cell')) { isSelecting = true; selection = [e.target]; e.target.classList.add('selected'); } });
+            gridEl.addEventListener('mouseover', e => { if (isSelecting && e.target.classList.contains('word-search-cell') && !selection.includes(e.target)) { selection.push(e.target); e.target.classList.add('selected'); } });
+            document.body.addEventListener('mouseup', () => {
+                if (isSelecting) {
+                    const selectedWord = selection.map(cell => cell.textContent).join('');
+                    const reversedSelectedWord = selectedWord.split('').reverse().join('');
+                    let found = false;
+                    if (selectedWords.includes(selectedWord)) { document.getElementById(`word-${selectedWord}`).style.textDecoration = 'line-through'; found = true; }
+                    else if (selectedWords.includes(reversedSelectedWord)) { document.getElementById(`word-${reversedSelectedWord}`).style.textDecoration = 'line-through'; found = true; }
+                    selection.forEach(cell => { cell.classList.remove('selected'); if (found) cell.classList.add('found'); });
+                    isSelecting = false; selection = [];
+                }
+            });
+        }
+        async function generateCrossword(apiKey, clueCount) {
+            document.getElementById('puzzle-title').textContent = 'Crossword';
+            document.getElementById('words-container').classList.remove('hidden');
+            const gridContainer = document.getElementById('grid-container');
+            gridContainer.innerHTML = '';
+            const acrossCount = Math.ceil(clueCount / 2), downCount = clueCount - acrossCount;
+            try {
+                const shortText = extractedText.substring(0, 2000);
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+                const payload = {
+                    contents: [{ parts: [{ text: `Based on the following text, create a simple crossword puzzle. Provide ${acrossCount} "across" clues and ${downCount} "down" clues. The answer words must be between 3-7 letters long and present in the text. Format the output as a JSON object with this exact structure: { "across": { "1": {"clue": "...", "answer": "...", "row": 0, "col": 0}, ... }, "down": { "2": {"clue": "...", "answer": "...", "row": 0, "col": 1}, ... } }. Text: "${shortText}"` }] }],
+                    generationConfig: { responseMimeType: "application/json" }
+                };
+                const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                if (!response.ok) throw new Error('API request failed');
+                const data = await response.json();
+                const jsonText = data.candidates[0].content.parts[0].text;
+                renderCrossword(JSON.parse(jsonText));
+            } catch (error) { console.error('Error generating crossword:', error); gridContainer.innerHTML = '<p class="text-red-400">Could not generate crossword. Check API key/PDF.</p>'; }
+        }
+        function renderCrossword(puzzleData) {
+            const gridContainer = document.getElementById('grid-container');
+            const wordsContainer = document.getElementById('words-container');
+            gridContainer.innerHTML = '';
+            const gridSize = 15;
+            let grid = Array(gridSize).fill(0).map(() => Array(gridSize).fill(null));
+            let clues = {};
+            for (const dir of ['across', 'down']) {
+                if (!puzzleData[dir]) continue;
+                for (const num in puzzleData[dir]) {
+                    const { clue, answer, row, col } = puzzleData[dir][num];
+                    clues[num] = { clue, dir };
+                    for (let i = 0; i < answer.length; i++) {
+                        const r = dir === 'down' ? row + i : row; const c = dir === 'across' ? col + i : col;
+                        if (r < gridSize && c < gridSize) { if (!grid[r][c]) grid[r][c] = { letter: answer[i] }; if (i === 0) grid[r][c].number = num; }
+                    }
+                }
+            }
+            const gridEl = document.createElement('div'); gridEl.className = 'crossword-grid';
+            grid.forEach(row => row.forEach(cellData => {
+                const cellEl = document.createElement('div');
+                if (cellData) { cellEl.className = 'crossword-cell relative'; cellEl.innerHTML = `<input type="text" maxlength="1" class="w-full h-full bg-transparent text-center outline-none uppercase">`; if (cellData.number) cellEl.innerHTML += `<span class="absolute top-0 left-1 text-xs text-slate-400">${cellData.number}</span>`; }
+                else { cellEl.className = 'crossword-cell empty'; }
+                gridEl.appendChild(cellEl);
+            }));
+            gridContainer.appendChild(gridEl);
+            wordsContainer.innerHTML = '<h4 class="text-xl font-bold mb-4">Clues:</h4>';
+            const acrossEl = document.createElement('div'); acrossEl.innerHTML = '<h5 class="font-semibold mt-2">Across</h5>';
+            const downEl = document.createElement('div'); downEl.innerHTML = '<h5 class="font-semibold mt-2">Down</h5>';
+            const sortedClues = Object.keys(clues).sort((a, b) => parseInt(a) - parseInt(b));
+            sortedClues.forEach(num => { const p = document.createElement('p'); p.className = "text-sm text-slate-300 my-1"; p.textContent = `${num}. ${clues[num].clue}`; if (clues[num].dir === 'across') acrossEl.appendChild(p); else downEl.appendChild(p); });
+            wordsContainer.appendChild(acrossEl); wordsContainer.appendChild(downEl);
+        }
+        async function generateMCQQuiz(apiKey, count) {
+            document.getElementById('puzzle-title').textContent = 'Multiple-Choice Quiz';
+            const gridContainer = document.getElementById('grid-container');
+            const wordsContainer = document.getElementById('words-container');
+            gridContainer.innerHTML = ''; wordsContainer.classList.add('hidden');
+            try {
+                const shortText = extractedText.substring(0, 4000);
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+                const payload = {
+                    contents: [{ parts: [{ text: `Based on the following text, create exactly ${count} multiple-choice questions. Each question must have 3 options. One option must be correct. Provide the output as a JSON array with this exact structure: [ { "question": "...", "options": ["...", "...", "..."], "correct_answer_index": 0 } ]. Text: "${shortText}"` }] }],
+                    generationConfig: { responseMimeType: "application/json" }
+                };
+                const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                if (!response.ok) throw new Error('API request failed');
+                const data = await response.json();
+                const jsonText = data.candidates[0].content.parts[0].text;
+                mcqData = JSON.parse(jsonText);
+                renderMCQQuiz(mcqData);
+            } catch (error) { console.error('Error generating MCQ quiz:', error); gridContainer.innerHTML = '<p class="text-red-400">Could not generate MCQ quiz. Check API key/PDF.</p>'; }
+        }
+        function renderMCQQuiz(quizData) {
+            const gridContainer = document.getElementById('grid-container');
+            gridContainer.innerHTML = '';
+            quizData.forEach((item, index) => {
+                const questionBlock = document.createElement('div');
+                questionBlock.className = 'mb-6 bg-slate-700/50 p-4 rounded-lg';
+                questionBlock.dataset.correctIndex = item.correct_answer_index;
+                const questionText = document.createElement('p');
+                questionText.className = 'font-semibold mb-3';
+                questionText.textContent = `${index + 1}. ${item.question}`;
+                questionBlock.appendChild(questionText);
+                item.options.forEach((option, optionIndex) => {
+                    const optionLabel = document.createElement('label');
+                    optionLabel.className = 'mcq-option block p-3 rounded-md hover:bg-slate-600 cursor-pointer transition';
+                    const radioInput = document.createElement('input');
+                    radioInput.type = 'radio'; radioInput.name = `question-${index}`; radioInput.value = optionIndex; radioInput.className = 'mr-3';
+                    optionLabel.appendChild(radioInput);
+                    optionLabel.append(option);
+                    questionBlock.appendChild(optionLabel);
+                });
+                gridContainer.appendChild(questionBlock);
+            });
+            const checkBtn = document.createElement('button');
+            checkBtn.id = 'check-mcq-btn';
+            checkBtn.textContent = 'Check Answers';
+            checkBtn.className = 'bg-sky-500 hover:bg-sky-600 text-white font-bold py-2 px-6 rounded-full transition duration-300 mt-4';
+            gridContainer.appendChild(checkBtn);
+            checkBtn.addEventListener('click', () => {
+                gridContainer.querySelectorAll('[data-correct-index]').forEach((block) => {
+                    const correctIndex = parseInt(block.dataset.correctIndex, 10);
+                    const selectedRadio = block.querySelector('input[type="radio"]:checked');
+                    block.querySelectorAll('.mcq-option').forEach(label => { label.classList.remove('correct', 'incorrect'); label.querySelector('input').disabled = true; });
+                    if (selectedRadio) {
+                        const selectedIndex = parseInt(selectedRadio.value, 10);
+                        if (selectedIndex === correctIndex) selectedRadio.parentElement.classList.add('correct');
+                        else { selectedRadio.parentElement.classList.add('incorrect'); block.querySelectorAll('.mcq-option')[correctIndex].classList.add('correct'); }
+                    } else { block.querySelectorAll('.mcq-option')[correctIndex].classList.add('correct'); }
+                });
+                checkBtn.disabled = true;
+            });
+        }
+        
+        // --- Heavily Improved PDF Download Function ---
+        function downloadPuzzleAsPDF() {
+            const element = document.getElementById('printable-area');
+            const pdfTitle = document.getElementById('puzzle-title').textContent || 'Puzzle';
+            const puzzleContainer = document.getElementById('puzzle-container');
+            const checkAnswersBtn = document.getElementById('check-mcq-btn');
+            let answerKeyEl = null;
+
+            // --- Prepare the content for a clean, printable layout ---
+            const originalFlexDirection = puzzleContainer.style.flexDirection;
+            puzzleContainer.style.flexDirection = 'column'; // Force grid/questions on top
+            if (checkAnswersBtn) checkAnswersBtn.style.display = 'none';
+            
+            if (selectedPuzzleType === 'mcq' && mcqData.length > 0) {
+                answerKeyEl = document.createElement('div');
+                answerKeyEl.className = 'mt-8 p-4 border-t-2 border-slate-600';
+                let answerHTML = '<h4 class="text-xl font-bold mb-4">Answer Key</h4><ol class="list-decimal list-inside">';
+                mcqData.forEach((item, index) => {
+                    const correctAnswer = item.options[item.correct_answer_index];
+                    answerHTML += `<li class="mb-1">${index + 1}. ${correctAnswer}</li>`;
+                });
+                answerHTML += '</ol>';
+                answerKeyEl.innerHTML = answerHTML;
+                element.appendChild(answerKeyEl);
+            }
+
+            html2canvas(element, { 
+                backgroundColor: '#1e293b',
+                scale: 2 
+            }).then(canvas => {
+                const imgData = canvas.toDataURL('image/png');
+                const pdf = new jsPDF({
+                    orientation: 'portrait',
+                    unit: 'px',
+                    format: 'a4' // Use standard A4 size
+                });
+
+                const pdfWidth = pdf.internal.pageSize.getWidth();
+                const pdfHeight = pdf.internal.pageSize.getHeight();
+                const canvasAspectRatio = canvas.width / canvas.height;
+                const pdfAspectRatio = pdfWidth / pdfHeight;
+
+                let finalWidth, finalHeight;
+                if (canvasAspectRatio > pdfAspectRatio) {
+                    finalWidth = pdfWidth;
+                    finalHeight = pdfWidth / canvasAspectRatio;
+                } else {
+                    finalHeight = pdfHeight;
+                    finalWidth = pdfHeight * canvasAspectRatio;
+                }
+                
+                const x = (pdfWidth - finalWidth) / 2;
+                const y = (pdfHeight - finalHeight) / 2;
+
+                pdf.addImage(imgData, 'PNG', x, y, finalWidth, finalHeight);
+                pdf.save(`${pdfTitle.replace(/\s+/g, '-')}.pdf`);
+
+                // --- Clean up and restore the interactive web view ---
+                puzzleContainer.style.flexDirection = originalFlexDirection;
+                if (checkAnswersBtn) checkAnswersBtn.style.display = '';
+                if (answerKeyEl) element.removeChild(answerKeyEl);
+            });
+        }
+
+        // --- Utility Functions ---
+        function updateStep(stepNumber) {
+            document.querySelectorAll('.step-card').forEach(card => card.classList.remove('active'));
+            document.getElementById(`step${stepNumber}`).classList.add('active');
+        }
+        function showLoading(show, sectionToHide) {
+            if (show) {
+                if (sectionToHide) sectionToHide.classList.add('hidden');
+                loadingIndicator.classList.remove('hidden');
+            } else {
+                if (sectionToHide) sectionToHide.classList.remove('hidden');
+                loadingIndicator.classList.add('hidden');
+            }
+        }
+        resetBtn.addEventListener('click', () => location.reload());
+        downloadPdfBtn.addEventListener('click', downloadPuzzleAsPDF);
+    </script>
+</body>
+</html>
+
